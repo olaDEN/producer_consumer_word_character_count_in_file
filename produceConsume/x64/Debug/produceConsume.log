@@ -1,0 +1,4 @@
+﻿cl : command line  warning D9025: overriding '/openmp' with '/openmp:llvm'
+  produceConsume.cpp
+F:\odev\produceConsume\produceConsume.cpp(144,41): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
+  produceConsume.vcxproj -> F:\odev\produceConsume\x64\Debug\produceConsume.exe
