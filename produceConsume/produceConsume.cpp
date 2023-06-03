@@ -9,7 +9,7 @@ typedef struct {
     int head;
     int tail;
     int count;
-    omp_lock_t lock; //
+    omp_lock_t lock; // This allows individual instances of the Que to be protected by separate locks, ensuring exclusive access to the struct's data.
 } Que;
 
 void enqueue(Que* q, char* sentence) {
@@ -60,7 +60,8 @@ char* trim_sentence(char* sentence) {
 
 int main() {
 
-    Que queues[4];
+    Que queues[4];//Array of Que structures
+
     for (int i = 0; i < 4; i++) {
         queues[i].head = 0;
         queues[i].tail = 0;
@@ -75,13 +76,13 @@ int main() {
         return 1;
     }
 
-    int finished = 0;
+    int done = 0;
     int total_words = 0;
     int total_chars = 0;
 
 #pragma omp parallel num_threads(12)
     {
-        int th_id = omp_get_thread_num();
+        int th_id = omp_get_thread_num(); //random id.
         if (th_id < 8) {
             // Producer threads
             char line[1000];
@@ -95,7 +96,7 @@ int main() {
                             int consumer_id = rand() % 4;
                             size_t sentence_length = 0;
                             if (strnlen_s(sentence, 1000) > 1) {
-                                omp_set_lock(&queues[consumer_id].lock);//p:269
+                                omp_set_lock(&queues[consumer_id].lock);//p:269/*Locking the struct instance queues[consumer_id] allows as to enforce mutual exclusion*/
                                 enqueue(&queues[consumer_id], sentence); //enqueue sentence in a random consumer's queue
                                 omp_unset_lock(&queues[consumer_id].lock);
                                 printf("Producer %d: %s\n", th_id, trim_sentence(sentence));
@@ -107,17 +108,16 @@ int main() {
                     else {
                         line[0] = '\0';
                     }
-                
-
+                //If a line is empty, indicating the end of the file, the producer thread increments the done variable using an atomic operation(#pragma omp atomic) and breaks out of the loop.
                 if (line[0] == '\0') {// the atomic directive has the potential to be the fastest method of obtaining mutual exclusion. page:270
-                    #pragma omp atomic //necessary to prevent race conditions if multiple producers tried to read or modify the value of "finished" at the same time
-                    finished++;
-
+                    #pragma omp atomic //necessary to prevent race conditions if multiple producers tried to read or modify the value of "done" at the same time/
+                    done++;
                     break;
                 }
             }
         }
         else {
+         // threads can  start dequeuing while other threads are still enqueueing since no barrier is used.No need for barrier.
         // Consumer threads
         int consumer_id = th_id % 4;; //rest of the 12 threads are consumers
         while (1) {
@@ -134,7 +134,7 @@ int main() {
             }
             omp_unset_lock(&queues[consumer_id].lock);
 
-            if (deQsentence != NULL && deQsentence[0] != '\0') {
+            if (deQsentence != NULL && deQsentence[0] != '\0') {//Check If there are sentences in the queue (dequeued sentence is not NULL)
                 char sentence_copy[1000];
                 strcpy_s(sentence_copy, 1000, deQsentence);
                 char* next;
@@ -146,13 +146,13 @@ int main() {
                 }
                 printf("Consumer %d: %s (Word count: %d, Character count: %d)\n", consumer_id, trim_sentence(deQsentence), word_count, char_count);
                 // Add to total counts
-                #pragma omp atomic
+                #pragma omp atomic//necessary to prevent race conditions if multiple producers tried to read or modify the value of "totla_words" at the same time
                 total_words += word_count;
                 #pragma omp atomic
                 total_chars += char_count;
             }
-            else {
-                if (finished == 8) {
+            else {//Synchronization handling: As long as the done variable is not equal to 8, which means that all producer threads have finished enqueueing, the consumer thread will continue looping and checking for sentences in the queue.
+                if (done == 8) {//If there are no sentences in the queue and the done variable is equal to 8, indicating that all producers have finished, the consumer threads break out of the loop.
                     break;
                 }
             }
@@ -204,7 +204,7 @@ int main() {
 
                 if (line[0] == '\0') {
                     #pragma omp atomic
-                    finished++;
+                    done++;
 
                     break;
                 }
@@ -249,11 +249,11 @@ int main() {
                         total_chars += char_count;
                     }
                     else {
-                        int finished;
+                        int done;
                         #pragma omp atomic read
-                        finished = finished;
+                        done = done;
 
-                        if (finished == 8) {
+                        if (done == 8) {
                             break;
                         }
                     }
