@@ -1,0 +1,3 @@
+﻿  barrier.cpp
+F:\odev\barrier\barrier.cpp(147,41): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
+  barrier.vcxproj -> F:\odev\barrier\x64\Debug\barrier.exe
